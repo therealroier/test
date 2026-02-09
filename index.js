@@ -1,98 +1,78 @@
 import express from "express";
 import fs from "fs";
 import cors from "cors";
-import { nanoid } from "nanoid";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB = "./db.json";
-const API_KEY = process.env.API_KEY || "";
+const FINAL_SCRIPT = "https://pastefy.app/a5g4vwd3/raw";
 
 app.use(cors());
 app.use(express.json());
 
+if (!fs.existsSync(DB)) {
+  fs.writeFileSync(DB, JSON.stringify({
+    totalExecs: 0,
+    users: {}
+  }, null, 2));
+}
+
 const loadDB = () => JSON.parse(fs.readFileSync(DB, "utf8"));
 const saveDB = (db) => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
-const today = () => new Date().toISOString().slice(0,10);
 
-/* ---------- ROOT ---------- */
 app.get("/", (_, res) => res.send("DZ API ONLINE"));
 
-/* ---------- STATS ---------- */
 app.get("/stats", (_, res) => {
   const db = loadDB();
-  const t = today();
-  const now = Date.now();
-
-  const onlineUsers = Object.keys(db.online).filter(
-    id => now - db.online[id] < 35000
-  );
-
   res.json({
-    total: db.total,
-    today: db.daily[t] ? Object.keys(db.daily[t]).length : 0,
-    newToday: db.newToday,
-    online: onlineUsers.length
+    "All-Time": Object.keys(db.users).length,
+    "Executions": db.totalExecs
   });
 });
 
-/* ---------- EXEC (ROBLOX) ---------- */
 app.post("/exec", (req, res) => {
-  const auth = req.headers.authorization || "";
-  if (API_KEY && auth !== `Bearer ${API_KEY}`)
-    return res.status(403).json({ error: "Forbidden" });
-
-  const { userId, username } = req.body;
-  if (!userId) return res.status(400).json({ error: "Missing userId" });
-
-  const db = loadDB();
-  const t = today();
-
-  if (!db.users[userId]) {
-    db.users[userId] = { username, firstSeen: Date.now() };
-    db.newToday++;
+  const { action, nickname, password, license } = req.body;
+  
+  if (!action || !nickname || !password) {
+    return res.status(400).json({ error: "Missing data" });
   }
 
-  if (!db.daily[t]) db.daily[t] = {};
-  if (!db.daily[t][userId]) {
-    db.daily[t][userId] = true;
-    db.total++;
-  }
-
-  db.online[userId] = Date.now();
-  db.logs.push({
-    time: Date.now(),
-    userId,
-    username
-  });
-
-  if (db.logs.length > 1000) db.logs.shift();
-  saveDB(db);
-
-  res.json({ ok: true });
-});
-
-/* ---------- LOGS (ADMIN) ---------- */
-app.get("/logs", (req, res) => {
-  const token = req.headers["x-owner-token"];
   const db = loadDB();
-  if (!db.ownerToken || token !== db.ownerToken)
-    return res.status(403).json({ error: "Forbidden" });
+  const userKey = nickname.trim().toLowerCase();
 
-  res.json(db.logs.reverse());
-});
+  if (action === "register") {
+    if (db.users[userKey]) {
+      return res.status(400).json({ status: "error", message: "UserExists" });
+    }
 
-/* ---------- OWNER ---------- */
-app.post("/owner/set", (req, res) => {
-  const db = loadDB();
-  if (!db.ownerToken) {
-    db.ownerToken = nanoid(24);
+    db.users[userKey] = {
+      username: nickname,
+      password: password,
+      license: license || "N/A"
+    };
+    
+    db.totalExecs++;
     saveDB(db);
-    return res.json({ ownerToken: db.ownerToken });
+    return res.status(200).json({ status: "success" });
   }
-  res.status(403).json({ error: "Already claimed" });
+
+  if (action === "login") {
+    const user = db.users[userKey];
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ status: "error", message: "Invalid" });
+    }
+
+    db.totalExecs++;
+    saveDB(db);
+
+    return res.status(200).json({
+      status: "success",
+      script: FINAL_SCRIPT
+    });
+  }
+
+  res.status(404).json({ error: "ActionNotFound" });
 });
 
-app.listen(PORT, () =>
-  console.log("DZ API corriendo en puerto", PORT)
-);
+app.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
