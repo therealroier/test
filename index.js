@@ -11,14 +11,26 @@ const API_KEY = process.env.API_KEY || "";
 app.use(cors());
 app.use(express.json());
 
+const initDB = () => {
+  if (!fs.existsSync(DB)) {
+    fs.writeFileSync(DB, JSON.stringify({
+      total: 0,
+      newToday: 0,
+      users: {},
+      daily: {},
+      online: {},
+      logs: [],
+      ownerToken: null
+    }, null, 2));
+  }
+};
+
 const loadDB = () => JSON.parse(fs.readFileSync(DB, "utf8"));
 const saveDB = (db) => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => new Date().toISOString().slice(0, 10);
 
-/* ---------- ROOT ---------- */
 app.get("/", (_, res) => res.send("DZ API ONLINE"));
 
-/* ---------- STATS ---------- */
 app.get("/stats", (_, res) => {
   const db = loadDB();
   const t = today();
@@ -29,14 +41,14 @@ app.get("/stats", (_, res) => {
   );
 
   res.json({
-    total: db.total,
-    today: db.daily[t] ? Object.keys(db.daily[t]).length : 0,
-    newToday: db.newToday,
-    online: onlineUsers.length
+    "Executions": db.total,
+    "REGISTERED USERS": Object.keys(db.users).length,
+    "All-Time": db.newToday,
+    "Active Clients": onlineUsers.length,
+    "todayExecutions": db.daily[t] ? Object.keys(db.daily[t]).length : 0
   });
 });
 
-/* ---------- EXEC (ROBLOX) ---------- */
 app.post("/exec", (req, res) => {
   const auth = req.headers.authorization || "";
   if (API_KEY && auth !== `Bearer ${API_KEY}`)
@@ -72,7 +84,6 @@ app.post("/exec", (req, res) => {
   res.json({ ok: true });
 });
 
-/* ---------- LOGS (ADMIN) ---------- */
 app.get("/logs", (req, res) => {
   const token = req.headers["x-owner-token"];
   const db = loadDB();
@@ -82,7 +93,6 @@ app.get("/logs", (req, res) => {
   res.json(db.logs.reverse());
 });
 
-/* ---------- OWNER ---------- */
 app.post("/owner/set", (req, res) => {
   const db = loadDB();
   if (!db.ownerToken) {
@@ -93,6 +103,7 @@ app.post("/owner/set", (req, res) => {
   res.status(403).json({ error: "Already claimed" });
 });
 
+initDB();
 app.listen(PORT, () =>
   console.log("DZ API corriendo en puerto", PORT)
 );
