@@ -13,50 +13,37 @@ app.use(express.json());
 if (!fs.existsSync(DB)) {
   fs.writeFileSync(DB, JSON.stringify({
     totalExecs: 0,
-    users: {},
-    online: {},
-    logs: []
+    users: {}
   }, null, 2));
 }
 
 const loadDB = () => JSON.parse(fs.readFileSync(DB, "utf8"));
 const saveDB = (db) => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
-const today = () => new Date().toISOString().slice(0, 10);
 
-app.get("/", (_, res) => res.send("DZ API ONLINE"));
+app.get("/", (_, res) => res.send("API ONLINE"));
 
 app.get("/stats", (_, res) => {
   const db = loadDB();
-  const t = today();
-  const now = Date.now();
-
-  const activeUsers = Object.keys(db.online).filter(
-    id => now - db.online[id] < 45000
-  ).length;
-
   res.json({
     "All-Time": Object.keys(db.users).length,
     "Executions": db.totalExecs
   });
 });
 
-app.post("/api/auth", (req, res) => {
+app.post("/exec", (req, res) => {
   const { action, nickname, password, license } = req.body;
   if (!action || !nickname || !password) return res.status(400).json({ error: "Missing data" });
 
   const db = loadDB();
-  const cleanNick = nickname.trim().toLowerCase();
+  const userKey = nickname.trim().toLowerCase();
 
   if (action === "register") {
-    if (db.users[cleanNick]) {
-      return res.status(400).json({ status: "error", message: "UserExists" });
-    }
+    if (db.users[userKey]) return res.status(400).json({ status: "error" });
 
-    db.users[cleanNick] = {
+    db.users[userKey] = {
       username: nickname,
       password: password,
-      license: license || "N/A",
-      regDate: today()
+      license: license || "N/A"
     };
 
     saveDB(db);
@@ -64,20 +51,13 @@ app.post("/api/auth", (req, res) => {
   }
 
   if (action === "login") {
-    const user = db.users[cleanNick];
+    const user = db.users[userKey];
 
     if (!user || user.password !== password) {
-      return res.status(401).json({ status: "error", message: "Invalid" });
+      return res.status(401).json({ status: "error" });
     }
 
     db.totalExecs++;
-    db.online[cleanNick] = Date.now();
-    db.logs.push({
-      user: nickname,
-      time: new Date().toLocaleString()
-    });
-
-    if (db.logs.length > 100) db.logs.shift();
     saveDB(db);
 
     return res.status(200).json({
@@ -86,7 +66,7 @@ app.post("/api/auth", (req, res) => {
     });
   }
 
-  res.status(404).json({ error: "ActionNotFound" });
+  res.status(404).json({ error: "NotFound" });
 });
 
-app.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
+app.listen(PORT, () => console.log("Servidor en puerto", PORT));
