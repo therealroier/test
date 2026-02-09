@@ -11,20 +11,16 @@ app.use(cors());
 app.use(express.json());
 
 const loadDB = () => {
-  if (!fs.existsSync(DB)) {
-    const initial = { 
-      total: 0, 
-      newToday: 0, 
-      users: {}, 
-      daily: {}, 
-      online: {}, 
-      logs: [], 
-      ownerToken: null 
-    };
-    fs.writeFileSync(DB, JSON.stringify(initial, null, 2));
-    return initial;
+  try {
+    if (!fs.existsSync(DB)) {
+      const initial = { total: 0, newToday: 0, users: {}, daily: {}, online: {}, logs: [], ownerToken: null };
+      fs.writeFileSync(DB, JSON.stringify(initial, null, 2));
+      return initial;
+    }
+    return JSON.parse(fs.readFileSync(DB, "utf8"));
+  } catch (e) {
+    return { total: 0, users: {} };
   }
-  return JSON.parse(fs.readFileSync(DB, "utf8"));
 };
 
 const saveDB = (db) => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
@@ -34,7 +30,7 @@ app.get("/", (_, res) => res.send("DZ API ONLINE"));
 app.get("/stats", (_, res) => {
   const db = loadDB();
   res.json({
-    "Executions": db.total
+    "Executions": db.total || 0
   });
 });
 
@@ -47,15 +43,8 @@ app.post("/exec", (req, res) => {
 
   if (action === "register") {
     if (db.users[userKey]) return res.status(400).json({ status: "error" });
-
-    db.users[userKey] = {
-      username: nickname,
-      password: password,
-      license: license
-    };
-
-    db.total++;
-    db.newToday++;
+    db.users[userKey] = { username: nickname, password: password, license: license };
+    db.total = (db.total || 0) + 1;
     saveDB(db);
     return res.status(200).json({ status: "success" });
   }
@@ -63,17 +52,12 @@ app.post("/exec", (req, res) => {
   if (action === "login") {
     const user = db.users[userKey];
     if (!user || user.password !== password) return res.status(401).json({ status: "error" });
-
-    db.total++;
+    db.total = (db.total || 0) + 1;
     saveDB(db);
-
-    return res.status(200).json({
-      status: "success",
-      script: FINAL_SCRIPT
-    });
+    return res.status(200).json({ status: "success", script: FINAL_SCRIPT });
   }
 
   res.status(404).json({ error: "NotFound" });
 });
 
-app.listen(PORT, () => console.log("Servidor corriendo con estructura DZ"));
+app.listen(PORT, () => console.log("Servidor corriendo"));
